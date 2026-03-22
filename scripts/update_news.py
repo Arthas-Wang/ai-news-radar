@@ -2027,7 +2027,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Aggregate AI news updates from multiple sources")
     parser.add_argument("--output-dir", default="data", help="Directory for output JSON files")
     parser.add_argument("--window-hours", type=int, default=24, help="24h window size")
-    parser.add_argument("--archive-days", type=int, default=45, help="Keep archive for N days")
+    parser.add_argument("--archive-days", type=int, default=21, help="Keep archive for N days")
     parser.add_argument("--translate-max-new", type=int, default=80, help="Max new EN->ZH title translations per run")
     parser.add_argument("--rss-opml", default="", help="Optional OPML file path to include RSS sources")
     parser.add_argument("--rss-max-feeds", type=int, default=0, help="Optional max OPML RSS feeds to fetch (0 means all)")
@@ -2278,7 +2278,10 @@ def main() -> int:
         }
 
     latest_path.write_text(json.dumps(latest_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    archive_path.write_text(json.dumps(archive_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    archive_path.write_text(
+        json.dumps(archive_payload, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     status_path.write_text(json.dumps(status_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     waytoagi_path.write_text(json.dumps(waytoagi_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     title_cache_path.write_text(json.dumps(title_cache, ensure_ascii=False, indent=2), encoding="utf-8")
