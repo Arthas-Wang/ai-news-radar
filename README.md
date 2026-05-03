@@ -36,6 +36,7 @@
 - 24h 双视图：`AI强相关` / `全量`
 - 全量模式去重开关
 - AI 模式默认去重
+- 覆盖雷达：源健康、AI 信号密度、官方/日报、Builders/X、聚合广度、私人扩展
 - 站点与分区聚合展示
 - 中英双语标题显示
 - WaytoAGI：`当天` / `近7日` 切换
@@ -149,6 +150,7 @@ You only need to run one command, or let GitHub Actions run it on schedule.
 - OPML RSS ingestion (private `feeds/follow.opml`; template provided as `feeds/follow.example.opml`)
 - 24h two-mode UI (`AI-focused` / `All`)
 - Dedup toggle in All mode, dedup-by-default in AI mode
+- Coverage radar for source health, signal density, official/newsletter, builders/X, aggregator breadth, and private extension paths
 - Site + section grouping
 - Bilingual title rendering
 - WaytoAGI toggle (`Today` / `Last 7 Days`)

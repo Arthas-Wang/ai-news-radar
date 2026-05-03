@@ -39,6 +39,34 @@ const waytoagiMetaEl = document.getElementById("waytoagiMeta");
 const waytoagiListEl = document.getElementById("waytoagiList");
 const waytoagiTodayBtnEl = document.getElementById("waytoagiTodayBtn");
 const waytoagi7dBtnEl = document.getElementById("waytoagi7dBtn");
+const coverageStripEl = document.getElementById("coverageStrip");
+
+const SOURCE_KINDS = {
+  official_ai: { label: "官方", tone: "official" },
+  aibreakfast: { label: "日报", tone: "newsletter" },
+  followbuilders: { label: "Builders/X", tone: "builders" },
+  techurls: { label: "聚合", tone: "aggregate" },
+  buzzing: { label: "聚合", tone: "aggregate" },
+  iris: { label: "聚合", tone: "aggregate" },
+  bestblogs: { label: "博客", tone: "blogs" },
+  tophub: { label: "聚合", tone: "aggregate" },
+  zeli: { label: "聚合", tone: "aggregate" },
+  aihubtoday: { label: "AI站点", tone: "aihub" },
+  aibase: { label: "AI站点", tone: "aihub" },
+  newsnow: { label: "聚合", tone: "aggregate" },
+};
+
+const AGGREGATE_SITE_IDS = new Set([
+  "techurls",
+  "buzzing",
+  "iris",
+  "bestblogs",
+  "tophub",
+  "zeli",
+  "aihubtoday",
+  "aibase",
+  "newsnow",
+]);
 
 function fmtNumber(n) {
   return new Intl.NumberFormat("zh-CN").format(n || 0);
@@ -80,6 +108,70 @@ function setStats(payload) {
     node.className = "stat";
     node.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div>`;
     statsEl.appendChild(node);
+  });
+}
+
+function sourceKind(siteId) {
+  return SOURCE_KINDS[siteId] || { label: "来源", tone: "default" };
+}
+
+function siteRows() {
+  return Array.isArray(state.sourceStatus?.sites) ? state.sourceStatus.sites : [];
+}
+
+function siteRow(siteId) {
+  return siteRows().find((site) => site.site_id === siteId) || null;
+}
+
+function sumSiteItems(siteIds) {
+  const ids = new Set(siteIds);
+  return siteRows().reduce((sum, site) => ids.has(site.site_id) ? sum + Number(site.item_count || 0) : sum, 0);
+}
+
+function renderCoverageCard(label, value, meta, tone = "") {
+  const node = document.createElement("div");
+  node.className = `coverage-card ${tone}`.trim();
+  const labelEl = document.createElement("span");
+  labelEl.className = "coverage-label";
+  labelEl.textContent = label;
+  const valueEl = document.createElement("strong");
+  valueEl.textContent = value;
+  const metaEl = document.createElement("span");
+  metaEl.className = "coverage-meta";
+  metaEl.textContent = meta;
+  node.append(labelEl, valueEl, metaEl);
+  return node;
+}
+
+function renderCoverageStrip(errorMessage = "") {
+  if (!coverageStripEl) return;
+  coverageStripEl.innerHTML = "";
+
+  const rows = siteRows();
+  const failedSites = Array.isArray(state.sourceStatus?.failed_sites) ? state.sourceStatus.failed_sites : [];
+  const rss = state.sourceStatus?.rss_opml || {};
+  const allCount = state.totalAllMode || state.itemsAll.length;
+  const signalRatio = allCount ? Math.round((state.totalAi / allCount) * 100) : 0;
+  const officialCount = Number(siteRow("official_ai")?.item_count || 0);
+  const newsletterCount = Number(siteRow("aibreakfast")?.item_count || 0);
+  const buildersCount = Number(siteRow("followbuilders")?.item_count || 0);
+  const aggregateCount = sumSiteItems(AGGREGATE_SITE_IDS);
+  const totalSites = rows.length;
+  const okSites = Number(state.sourceStatus?.successful_sites || 0);
+  const opmlValue = rss.enabled ? `${fmtNumber(rss.ok_feeds || 0)}/${fmtNumber(rss.effective_feed_total || 0)}` : "OPML";
+  const opmlMeta = rss.enabled ? "私有订阅已接入" : "可用 Secret 接入私有源";
+
+  const cards = [
+    ["源健康", totalSites ? `${fmtNumber(okSites)}/${fmtNumber(totalSites)}` : "加载中", failedSites.length ? `${fmtNumber(failedSites.length)} 个失败源` : (errorMessage || "内置源正常"), failedSites.length ? "warn" : "ok"],
+    ["AI 信号密度", `${fmtNumber(state.totalAi)} 条`, allCount ? `来自 ${fmtNumber(allCount)} 条去重全量 · ${signalRatio}%` : "等待新闻数据", "signal"],
+    ["官方 / 日报", `${fmtNumber(officialCount + newsletterCount)} 条`, "OpenAI 等官方节点 + AI Breakfast", "official"],
+    ["Builders / X", `${fmtNumber(buildersCount)} 条`, "Follow Builders 公开 feed", "builders"],
+    ["聚合广度", `${fmtNumber(aggregateCount)} 条`, "多站点补充覆盖", "aggregate"],
+    ["私人扩展", opmlValue, opmlMeta, "private"],
+  ];
+
+  cards.forEach(([label, value, meta, tone]) => {
+    coverageStripEl.appendChild(renderCoverageCard(label, value, meta, tone));
   });
 }
 
@@ -195,6 +287,10 @@ function getFilteredItems() {
 function renderItemNode(item) {
   const node = itemTpl.content.firstElementChild.cloneNode(true);
   node.querySelector(".site").textContent = item.site_name;
+  const kind = sourceKind(item.site_id);
+  const categoryEl = node.querySelector(".category");
+  categoryEl.textContent = kind.label;
+  categoryEl.classList.add(`kind-${kind.tone}`);
   node.querySelector(".source").textContent = `分区: ${item.source}`;
   node.querySelector(".time").textContent = fmtTime(item.published_at || item.first_seen_at);
 
@@ -523,19 +619,23 @@ async function init() {
 
     setStats(payload);
     renderModeSwitch();
+    renderCoverageStrip();
     renderSiteFilters();
     renderList();
     updatedAtEl.textContent = `更新时间：${fmtTime(state.generatedAt)}`;
   } else {
     updatedAtEl.textContent = "新闻数据加载失败";
     newsListEl.innerHTML = `<div class="empty">${newsResult.reason.message}</div>`;
+    renderCoverageStrip(newsResult.reason.message);
   }
 
   if (statusResult.status === "fulfilled") {
     state.sourceStatus = statusResult.value;
     renderSourceHealth();
+    renderCoverageStrip();
   } else {
     renderSourceHealth(statusResult.reason.message);
+    renderCoverageStrip(statusResult.reason.message);
   }
 
   if (waytoagiResult.status === "fulfilled") {

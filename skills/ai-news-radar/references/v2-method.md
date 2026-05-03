@@ -93,6 +93,8 @@ feed path, or optional-secret path is documented and validated.
 A v2 change is complete when:
 
 - The default page remains simple for ordinary users.
+- The first viewport shows source health and coverage as status signals, not a
+  pile of configuration controls.
 - Source coverage is documented as public default vs advanced/private.
 - New built-in sources have stable timestamps and do not require secrets.
 - Failures are visible in `source-status.json` instead of silently disappearing.

@@ -140,6 +140,68 @@ button {
   font-weight: 700;
 }
 
+.coverage-strip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coverage-card {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 11px;
+  background: var(--surface-soft);
+}
+
+.coverage-card strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.coverage-label,
+.coverage-meta {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.coverage-card.ok strong {
+  color: var(--good);
+}
+
+.coverage-card.warn strong {
+  color: var(--warn);
+}
+
+.coverage-card.signal {
+  border-color: rgba(18, 106, 115, 0.3);
+}
+
+.coverage-card.official {
+  border-color: rgba(31, 122, 77, 0.28);
+}
+
+.coverage-card.builders {
+  border-color: rgba(181, 82, 49, 0.32);
+}
+
+.coverage-card.aggregate {
+  border-color: rgba(102, 100, 95, 0.32);
+}
+
+.coverage-card.private {
+  border-color: rgba(154, 103, 0, 0.3);
+}
+
 .primary-controls {
   margin-top: 16px;
   display: grid;
@@ -544,11 +606,38 @@ summary:focus-visible {
   color: #3f3d39;
 }
 
+.category,
 .source {
   padding: 2px 7px;
   border: 1px solid var(--line);
   border-radius: 999px;
   font-size: 11px;
+}
+
+.category {
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.category.kind-official {
+  border-color: rgba(31, 122, 77, 0.34);
+  color: var(--good);
+}
+
+.category.kind-newsletter {
+  border-color: rgba(154, 103, 0, 0.34);
+  color: var(--warn);
+}
+
+.category.kind-builders {
+  border-color: rgba(181, 82, 49, 0.36);
+  color: var(--accent-warm);
+}
+
+.category.kind-aggregate,
+.category.kind-blogs,
+.category.kind-aihub {
+  color: var(--muted);
 }
 
 .time {
@@ -713,6 +802,7 @@ summary:focus-visible {
   }
 
   .stats,
+  .coverage-strip,
   .health-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -740,6 +830,7 @@ summary:focus-visible {
   }
 
   .stats,
+  .coverage-strip,
   .health-grid {
     grid-template-columns: 1fr;
   }

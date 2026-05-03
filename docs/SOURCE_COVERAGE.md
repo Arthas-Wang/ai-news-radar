@@ -14,6 +14,9 @@ Use a two-layer model:
 
 Do not expose every source-management decision in the first screen. Too many
 choices make the tool harder for new users to understand.
+The first screen may show coverage and health as read-only status signals:
+source health, AI signal density, official/newsletter coverage, builders/X,
+aggregator breadth, and private extension readiness.
 
 ## V2 Coverage Claim
 

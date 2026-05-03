@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Signal Board</title>
+    <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./assets/styles.css" />
   </head>
   <body>
@@ -27,6 +28,8 @@
         </div>
 
         <section class="stats" id="stats"></section>
+
+        <section class="coverage-strip" id="coverageStrip" aria-label="Source coverage status"></section>
       </header>
 
       <section class="primary-controls">
@@ -93,6 +96,7 @@
       <article class="news-card">
         <div class="meta-row">
           <span class="site"></span>
+          <span class="category"></span>
           <span class="source"></span>
           <time class="time"></time>
         </div>
