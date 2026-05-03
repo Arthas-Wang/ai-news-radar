@@ -1,0 +1,6 @@
+interface:
+  display_name: "AI News Radar"
+  short_description: "Maintain and extend AI news sources"
+  default_prompt: "Use $ai-news-radar to evaluate this AI news source and add it safely if it fits the project."
+policy:
+  allow_implicit_invocation: true
