@@ -2,13 +2,21 @@
 
 中文 | [English](#english)
 
-高质量 AI/科技新闻聚合项目，支持静态网页展示、24h 增量更新、WaytoAGI 更新日志、OPML RSS 批量接入、失败源替换与告警。
+高质量 AI/科技新闻聚合项目。普通用户直接打开网页看 24 小时 AI 信号；维护者可以 fork 后接入自己的 OPML/RSS；Codex / Claude Code 可以用项目内 Skill 继续添加信息源和优化产品。
 
 说明：本仓库已适配公开发布，**不会包含作者私有 RSS 订阅文件**。
 
 ## 中文
 
-### 0. 在线入口
+### 0. 你是哪类用户？
+
+| 你想做什么 | 直接入口 |
+| --- | --- |
+| 我只是想看 AI 新闻 | 打开 `https://learnprompt.github.io/ai-news-radar/` |
+| 我想 fork 一个自己的版本 | 看下面的「1 分钟上手」和「GitHub 自动更新」 |
+| 我想给 Codex / Claude Code 用 | 看 `skills/ai-news-radar/SKILL.md` 和 `docs/GPT_HANDOFF.md` |
+
+### 1. 在线入口
 
 - 线上页面：
   - `https://learnprompt.github.io/ai-news-radar/`
@@ -16,17 +24,41 @@
   - 日常查看请打开这个页面，不要直接打开 `data/latest-24h.json`
   - GitHub Actions 会持续更新 `data/*.json`，GitHub Pages 会展示最新页面
 
-### 1. 这个项目每天更新需要一直开 Codex 吗？
+### 2. 1 分钟上手
 
-不需要。  
-你只要执行一个命令，或者直接用 GitHub Actions 定时运行即可。
+普通用户不需要安装任何东西，直接打开线上页面即可。
+
+想 fork 自己的版本：
+
+1. Fork 本仓库。
+2. 在 GitHub Pages 里开启 Pages。
+3. 保留 `.github/workflows/update-news.yml`，它会定时更新 `data/*.json`。
+4. 可选：把你的 OPML base64 内容放进 GitHub Secret `FOLLOW_OPML_B64`。
+
+想本地运行：
+
+```bash
+git clone https://github.com/LearnPrompt/ai-news-radar.git
+cd ai-news-radar
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/update_news.py --output-dir data --window-hours 24
+python -m http.server 8080
+```
+
+打开：`http://localhost:8080`
+
+### 3. 这个项目每天更新需要一直开 Codex 吗？
+
+不需要。你只要执行一个命令，或者直接用 GitHub Actions 定时运行即可。
 
 - 本地命令（一次）：
   - `python scripts/update_news.py --output-dir data --window-hours 24 --rss-opml feeds/follow.opml`
 - 自动化（推荐）：
   - `.github/workflows/update-news.yml` 已配置定时任务，默认每 30 分钟自动更新并提交数据。
 
-### 2. 主要能力
+### 4. 主要能力
 
 - 官方 AI 节点直连（OpenAI News / OpenAI Codex Changelog / OpenAI Skills / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI）
 - 高信号日报补充（AI Breakfast）
@@ -46,15 +78,28 @@
 - 告警数据输出：
   - `failed_feeds` / `zero_item_feeds` / `skipped_feeds` / `replaced_feeds`
 
-### 2.1 自定义信息源与 Agent 工作流
+### 5. 覆盖范围
 
 这个项目采用双层设计：
 
 - 默认层：给普通 AI 爱好者直接使用的 `AI强相关` 信号流。
 - 进阶层：给维护者使用的 OPML、自定义源、源健康状态与 GitHub Actions 部署配置。
 
-添加自己的信息源时，优先使用 `feeds/follow.opml` 或 GitHub Secret `FOLLOW_OPML_B64`，不要把私有订阅文件提交到仓库。
-详细覆盖策略见 `docs/SOURCE_COVERAGE.md`。给 Codex / Claude Code 使用的项目 Skill 在 `skills/ai-news-radar/SKILL.md`。
+默认层覆盖：
+
+- 官方 RSS / Atom / changelog
+- 高信号 newsletter 公开归档
+- GitHub 公开生成的 feed，例如 Follow Builders
+- 多个公开聚合站
+
+进阶层覆盖：
+
+- 个人 OPML / RSS
+- GitHub Secret `FOLLOW_OPML_B64`
+- 未来可选的 X API、邮箱、WeChat 等 secret-backed adapter
+
+不把 X API、邮箱、cookies、WeChat 登录态作为公共默认源。它们对普通用户不稳定，也容易引入隐私和维护成本。
+详细覆盖策略见 `docs/SOURCE_COVERAGE.md`。
 
 源可靠性说明：
 
@@ -63,7 +108,23 @@
 - Follow Builders 使用中心化 GitHub Actions + 官方 X API 抓取公开 X 内容，本项目只读取它公开发布的 JSON feed；这比公共 RSSHub 稳定，但依赖第三方中心 feed。
 - AI Breakfast 的 Beehiiv 原始 `/feed` 在命令行和 GitHub Actions 场景可能被 Cloudflare 拦截；默认层通过 Jina Reader 读取公开归档页，只取公开标题和链接。
 
-### 3. 数据输出
+### 6. 给 Codex / Claude Code 使用
+
+项目 Skill 在：
+
+- `skills/ai-news-radar/SKILL.md`
+
+让新的 Agent 接手时，推荐给它这句话：
+
+```text
+请读取这个仓库，并使用 skills/ai-news-radar/SKILL.md。
+先看 README.md、docs/GPT_HANDOFF.md、docs/SOURCE_COVERAGE.md、docs/V2_PRODUCT_BRIEF.md。
+请验证这个项目是否已经达到可发布状态，并指出还需要修复的具体问题。
+```
+
+完整交接说明见 `docs/GPT_HANDOFF.md`。
+
+### 7. 数据输出
 
 - `data/latest-24h.json`
 - `data/archive.json`
@@ -71,7 +132,7 @@
 - `data/waytoagi-7d.json`
 - `data/title-zh-cache.json`
 
-### 4. 快速开始
+### 8. 本地自定义 OPML
 
 ```bash
 cd ai-news-radar
@@ -86,7 +147,7 @@ python -m http.server 8080
 
 打开：`http://localhost:8080`
 
-### 5. Secrets / API 配置说明（重要）
+### 9. Secrets / API 配置说明（重要）
 
 默认情况下，本项目 **不需要任何 API Key** 才能运行核心抓取流程。  
 你目前没有提供 API 密钥，仓库中也不会写入任何密钥信息。
@@ -105,7 +166,7 @@ python -m http.server 8080
     - `base64 < feeds/follow.opml | pbcopy`（macOS）
     - 然后把内容粘贴到 GitHub 仓库的 Secrets
 
-### 6. GitHub 自动更新
+### 10. GitHub 自动更新
 
 工作流：`.github/workflows/update-news.yml`
 
@@ -118,7 +179,15 @@ python -m http.server 8080
 
 ## English
 
-### 0. Live Site
+### 0. Who Is This For?
+
+| Goal | Start here |
+| --- | --- |
+| Read AI news | Open `https://learnprompt.github.io/ai-news-radar/` |
+| Fork your own version | Use the 1-minute setup below |
+| Hand it to Codex / Claude Code | Read `skills/ai-news-radar/SKILL.md` and `docs/GPT_HANDOFF.md` |
+
+### 1. Live Site
 
 - Live page:
   - `https://learnprompt.github.io/ai-news-radar/`
@@ -130,7 +199,32 @@ Production-grade AI/tech news aggregator with a static web UI, 24h updates, Wayt
 
 This repo is safe for public release and does **not** include the maintainer's private RSS subscription file.
 
-### 1. Do I need Codex running all day?
+### 2. 1-Minute Setup
+
+Readers do not need to install anything. Open the live page.
+
+To fork your own version:
+
+1. Fork this repository.
+2. Enable GitHub Pages.
+3. Keep `.github/workflows/update-news.yml`; it updates `data/*.json`.
+4. Optional: add your OPML as the GitHub Secret `FOLLOW_OPML_B64`.
+
+To run locally:
+
+```bash
+git clone https://github.com/LearnPrompt/ai-news-radar.git
+cd ai-news-radar
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/update_news.py --output-dir data --window-hours 24
+python -m http.server 8080
+```
+
+Open: `http://localhost:8080`
+
+### 3. Do I need Codex running all day?
 
 No.  
 You only need to run one command, or let GitHub Actions run it on schedule.
@@ -140,7 +234,7 @@ You only need to run one command, or let GitHub Actions run it on schedule.
 - Scheduled automation:
   - `.github/workflows/update-news.yml` runs every 30 minutes and commits updated data.
 
-### 2. Core features
+### 4. Core features
 
 - Multi-source web aggregation
 - First-class official AI update sources (OpenAI News / OpenAI Codex Changelog / OpenAI Skills / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI)
@@ -159,7 +253,7 @@ You only need to run one command, or let GitHub Actions run it on schedule.
   - Auto-skip unsupported source types (to save crawl time)
 - Alert-friendly status output (`failed_feeds`, `zero_item_feeds`, `skipped_feeds`, `replaced_feeds`)
 
-### 2.1 Custom sources and agent workflow
+### 5. Custom sources and agent workflow
 
 This project uses a two-layer design:
 
@@ -176,7 +270,15 @@ Source reliability notes:
 - Follow Builders uses centralized GitHub Actions plus the official X API to fetch public X content. This project reads its public JSON feeds, which is more stable than public RSSHub but depends on a third-party central feed.
 - AI Breakfast's Beehiiv `/feed` can be blocked by Cloudflare from CLI or GitHub Actions, so the default layer reads the public archive through Jina Reader and extracts public titles and links.
 
-### 3. Output files
+For agent handoff, use:
+
+```text
+Please inspect this repository and use skills/ai-news-radar/SKILL.md.
+Start with README.md, docs/GPT_HANDOFF.md, docs/SOURCE_COVERAGE.md, and docs/V2_PRODUCT_BRIEF.md.
+Verify whether this project is ready to publish and list concrete remaining issues.
+```
+
+### 6. Output files
 
 - `data/latest-24h.json`
 - `data/archive.json`
@@ -184,7 +286,7 @@ Source reliability notes:
 - `data/waytoagi-7d.json`
 - `data/title-zh-cache.json`
 
-### 4. Quick start
+### 7. Quick start
 
 ```bash
 cd ai-news-radar
@@ -199,7 +301,7 @@ python -m http.server 8080
 
 Open: `http://localhost:8080`
 
-### 5. Secrets / API notes
+### 8. Secrets / API notes
 
 By default, this project needs **no API keys** for the core pipeline.  
 No secrets are stored in this repo.

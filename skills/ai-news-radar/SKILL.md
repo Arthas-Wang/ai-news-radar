@@ -10,6 +10,8 @@ description: "Use when working on the LearnPrompt AI News Radar / AI Signal Boar
 When this skill triggers inside the repo, read these files first:
 
 - `README.md` for project usage and current commands.
+- `docs/GPT_HANDOFF.md` before release-readiness checks or handing the project
+  to another agent.
 - `docs/SOURCE_COVERAGE.md` before changing source strategy.
 - `docs/V2_PRODUCT_BRIEF.md` before changing product positioning or first-screen UX.
 - `scripts/update_news.py` before changing data generation.
