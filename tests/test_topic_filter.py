@@ -7,8 +7,10 @@ from scripts.update_news import (
     is_hubtoday_placeholder_title,
     maybe_fix_mojibake,
     normalize_source_for_display,
+    parse_ai_breakfast_items,
     parse_feed_entries_via_xml,
     parse_anthropic_news_items,
+    parse_openai_codex_changelog_items,
 )
 
 
@@ -98,6 +100,16 @@ class TopicFilterTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["title"], "A")
 
+    def test_parse_atom_feed_entries_via_xml(self):
+        xml = b"""<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<entry><title>A</title><link href="https://x/a" /><updated>2026-02-20</updated></entry>
+</feed>"""
+        items = parse_feed_entries_via_xml(xml)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "A")
+        self.assertEqual(items[0]["link"], "https://x/a")
+
     def test_parse_anthropic_news_items(self):
         html = """
         <a href="/news/claude-opus-4-7">
@@ -111,6 +123,32 @@ class TopicFilterTests(unittest.TestCase):
         self.assertEqual(items[0].source, "Anthropic News")
         self.assertEqual(items[0].title, "Introducing Claude Opus 4.7")
         self.assertEqual(items[0].url, "https://www.anthropic.com/news/claude-opus-4-7")
+
+    def test_parse_openai_codex_changelog_items(self):
+        html = """
+        <div id="codex-changelog-content">
+          <li id="codex-2026-05-01">
+            <time>2026-05-01</time>
+            <h3><span>Codex app adds workspace companions</span></h3>
+          </li>
+        </div>
+        """
+        items = parse_openai_codex_changelog_items(html, now=None)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].source, "OpenAI Codex Changelog")
+        self.assertEqual(items[0].title, "Codex app adds workspace companions")
+        self.assertEqual(items[0].url, "https://developers.openai.com/codex/changelog#codex-2026-05-01")
+
+    def test_parse_ai_breakfast_items(self):
+        markdown = """
+        [May 1, 2026 • 4 min read ### **Anthropic update lands** AI Breakfast](https://aibreakfast.beehiiv.com/p/anthropic-update-lands)
+        [Apr 29, 2026 • 5 min read ### **OpenAI ships a model update** AI Breakfast](https://aibreakfast.beehiiv.com/p/openai-ships-model-update)
+        """
+        items = parse_ai_breakfast_items(markdown, now=None)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].source, "AI Breakfast")
+        self.assertEqual(items[0].title, "Anthropic update lands")
+        self.assertEqual(items[0].url, "https://aibreakfast.beehiiv.com/p/anthropic-update-lands")
 
     def test_hubtoday_placeholder_title(self):
         self.assertTrue(is_hubtoday_placeholder_title("详情见官方介绍(AI资讯)"))

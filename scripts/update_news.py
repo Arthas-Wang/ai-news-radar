@@ -100,8 +100,15 @@ OFFICIAL_AI_FEEDS: tuple[dict[str, str], ...] = (
         "xml_url": "https://github.blog/changelog/feed/",
         "html_url": "https://github.blog/changelog/",
     },
+    {
+        "title": "OpenAI Skills",
+        "xml_url": "https://github.com/openai/skills/commits/main.atom",
+        "html_url": "https://github.com/openai/skills",
+        "include_keywords": "hatch,pet,migrate-to-codex",
+    },
 )
 OFFICIAL_AI_MAX_AGE_DAYS = 45
+AIBREAKFAST_JINA_URL = "https://r.jina.ai/https://aibreakfast.beehiiv.com/"
 
 
 @dataclass
@@ -238,6 +245,8 @@ def parse_feed_entries_via_xml(feed_xml: bytes) -> list[dict[str, Any]]:
             ).strip()
             link = ""
             link_node = node.find("link")
+            if link_node is None:
+                link_node = node.find("{*}link")
             if link_node is not None:
                 link = (link_node.get("href") or link_node.text or "").strip()
             if not link:
@@ -1114,6 +1123,46 @@ def parse_anthropic_news_items(page_html: str, now: datetime) -> list[RawItem]:
     return out
 
 
+def parse_openai_codex_changelog_items(page_html: str, now: datetime) -> list[RawItem]:
+    site_id = "official_ai"
+    site_name = "Official AI Updates"
+    soup = BeautifulSoup(page_html, "html.parser")
+    out: list[RawItem] = []
+    seen: set[str] = set()
+
+    for node in soup.select("#codex-changelog-content li[id], li[id]"):
+        item_id = str(node.get("id") or "").strip()
+        if not item_id or item_id in seen:
+            continue
+
+        time_tag = node.select_one("time")
+        title_tag = node.select_one("h3")
+        if not time_tag or not title_tag:
+            continue
+
+        title = maybe_fix_mojibake(title_tag.get_text(" ", strip=True))
+        published = parse_date_any(time_tag.get("datetime") or time_tag.get_text(" ", strip=True), now)
+        if not title or not published:
+            continue
+        if now and published < now - timedelta(days=OFFICIAL_AI_MAX_AGE_DAYS):
+            continue
+
+        seen.add(item_id)
+        out.append(
+            RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source="OpenAI Codex Changelog",
+                title=title,
+                url=f"https://developers.openai.com/codex/changelog#{item_id}",
+                published_at=published,
+                meta={"provider": "OpenAI"},
+            )
+        )
+
+    return out
+
+
 def fetch_feed_as_official_items(
     session: requests.Session,
     feed: dict[str, str],
@@ -1143,11 +1192,20 @@ def fetch_feed_as_official_items(
         entries = parse_feed_entries_via_xml(resp.content)
 
     out: list[RawItem] = []
+    include_keywords = [
+        keyword.strip().lower()
+        for keyword in str(feed.get("include_keywords") or "").split(",")
+        if keyword.strip()
+    ]
     for entry in entries:
         title = str(entry.get("title", "")).strip()
         link = str(entry.get("link", "")).strip()
         if not title or not link:
             continue
+        if include_keywords:
+            haystack = f"{title} {link}".lower()
+            if not any(keyword in haystack for keyword in include_keywords):
+                continue
         published = (
             parse_date_any(entry.get("published"), now)
             or parse_date_any(entry.get("updated"), now)
@@ -1192,9 +1250,71 @@ def fetch_official_ai_updates(session: requests.Session, now: datetime) -> list[
     except Exception:
         pass
 
+    try:
+        r = session.get("https://developers.openai.com/codex/changelog", timeout=20)
+        r.raise_for_status()
+        out.extend(parse_openai_codex_changelog_items(r.text, now))
+    except Exception:
+        pass
+
     if not out:
         raise ValueError("No official AI update sources returned items")
 
+    return out
+
+
+def parse_ai_breakfast_items(markdown_text: str, now: datetime) -> list[RawItem]:
+    site_id = "aibreakfast"
+    site_name = "AI Breakfast"
+    out: list[RawItem] = []
+    seen: set[str] = set()
+    pattern = re.compile(
+        r"([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})\s+•\s+\d+\s+min read\s+###\s+\*\*(.*?)\*\*.*?"
+        r"\]\((https?://aibreakfast\.beehiiv\.com/p/[^)]+)\)",
+        re.S,
+    )
+
+    for date_text, title_text, url in pattern.findall(markdown_text or ""):
+        url = url.strip()
+        if not url or url in seen:
+            continue
+        published = parse_date_any(date_text, now)
+        if not published:
+            continue
+        if now and published < now - timedelta(days=OFFICIAL_AI_MAX_AGE_DAYS):
+            continue
+
+        seen.add(url)
+        title = re.sub(r"\s+", " ", title_text).strip()
+        out.append(
+            RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source="AI Breakfast",
+                title=maybe_fix_mojibake(title),
+                url=url,
+                published_at=published,
+                meta={"feed_home": "https://aibreakfast.beehiiv.com/"},
+            )
+        )
+
+    return out
+
+
+def fetch_ai_breakfast(session: requests.Session, now: datetime) -> list[RawItem]:
+    resp = session.get(
+        AIBREAKFAST_JINA_URL,
+        timeout=25,
+        headers={
+            "User-Agent": BROWSER_UA,
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept": "text/plain, */*",
+        },
+    )
+    resp.raise_for_status()
+    out = parse_ai_breakfast_items(resp.text, now)
+    if not out:
+        raise ValueError("No AI Breakfast items parsed")
     return out
 
 
@@ -1598,6 +1718,7 @@ def fetch_newsnow(session: requests.Session, now: datetime) -> list[RawItem]:
 def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem], list[dict[str, Any]]]:
     tasks = [
         ("official_ai", "Official AI Updates", fetch_official_ai_updates),
+        ("aibreakfast", "AI Breakfast", fetch_ai_breakfast),
         ("techurls", "TechURLs", fetch_techurls),
         ("buzzing", "Buzzing", fetch_buzzing),
         ("iris", "Info Flow", fetch_iris),

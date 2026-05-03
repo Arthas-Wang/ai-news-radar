@@ -28,7 +28,8 @@
 
 ### 2. 主要能力
 
-- 官方 AI 节点直连（OpenAI / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI）
+- 官方 AI 节点直连（OpenAI News / OpenAI Codex Changelog / OpenAI Skills / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI）
+- 高信号日报补充（AI Breakfast）
 - 9 个聚合源补充覆盖（TechURLs / Buzzing / Info Flow / BestBlogs / TopHub / Zeli / AI HubToday / AIbase / NewsNow）
 - OPML RSS 批量接入（私有文件 `feeds/follow.opml`，仓库提供模板 `feeds/follow.example.opml`）
 - 24h 双视图：`AI强相关` / `全量`
@@ -52,6 +53,12 @@
 
 添加自己的信息源时，优先使用 `feeds/follow.opml` 或 GitHub Secret `FOLLOW_OPML_B64`，不要把私有订阅文件提交到仓库。
 详细覆盖策略见 `docs/SOURCE_COVERAGE.md`。给 Codex / Claude Code 使用的项目 Skill 在 `skills/ai-news-radar/SKILL.md`。
+
+源可靠性说明：
+
+- OpenAI News RSS 不覆盖所有开发者侧小更新；因此默认层额外抓取 OpenAI Codex Changelog，并过滤接入 OpenAI Skills 仓库里和 Codex/宠物相关的更新。
+- X/Twitter 没有官方 RSS。`feeds/social-x.example.opml` 提供 Karpathy 的 RSSHub 候选示例，适合按需复制进自己的 OPML；公共默认层不强依赖它，避免第三方 X 桥不稳定时拖垮站点。
+- AI Breakfast 的 Beehiiv 原始 `/feed` 在命令行和 GitHub Actions 场景可能被 Cloudflare 拦截；默认层通过 Jina Reader 读取公开归档页，只取公开标题和链接。
 
 ### 3. 数据输出
 
@@ -133,7 +140,8 @@ You only need to run one command, or let GitHub Actions run it on schedule.
 ### 2. Core features
 
 - Multi-source web aggregation
-- First-class official AI update sources (OpenAI / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI)
+- First-class official AI update sources (OpenAI News / OpenAI Codex Changelog / OpenAI Skills / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI)
+- High-signal newsletter coverage (AI Breakfast)
 - 9 aggregator sources for breadth (TechURLs / Buzzing / Info Flow / BestBlogs / TopHub / Zeli / AI HubToday / AIbase / NewsNow)
 - OPML RSS ingestion (private `feeds/follow.opml`; template provided as `feeds/follow.example.opml`)
 - 24h two-mode UI (`AI-focused` / `All`)
@@ -155,6 +163,12 @@ This project uses a two-layer design:
 
 For custom sources, prefer `feeds/follow.opml` locally or GitHub secret `FOLLOW_OPML_B64` in Actions. Do not commit private subscription files.
 See `docs/SOURCE_COVERAGE.md` for source strategy. The Codex / Claude Code project skill lives at `skills/ai-news-radar/SKILL.md`.
+
+Source reliability notes:
+
+- OpenAI News RSS does not cover every developer-side minor update, so the default layer also reads the OpenAI Codex Changelog and filtered OpenAI Skills updates related to Codex/pets.
+- X/Twitter has no official RSS. `feeds/social-x.example.opml` includes a Karpathy RSSHub candidate for personal OPML use, but the public default layer does not depend on it.
+- AI Breakfast's Beehiiv `/feed` can be blocked by Cloudflare from CLI or GitHub Actions, so the default layer reads the public archive through Jina Reader and extracts public titles and links.
 
 ### 3. Output files
 
