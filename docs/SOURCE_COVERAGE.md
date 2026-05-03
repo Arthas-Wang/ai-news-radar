@@ -20,6 +20,7 @@ choices make the tool harder for new users to understand.
 | Source type | Current support | Recommended path | Notes |
 | --- | --- | --- | --- |
 | Official RSS / Atom | Supported through OPML | Add to `feeds/follow.opml` locally, or `FOLLOW_OPML_B64` in GitHub Actions | Best default for personal customization. |
+| Official AI vendor updates | Built in for selected high-signal sources | Keep OpenAI, Anthropic, Google DeepMind/AI, Hugging Face, and GitHub AI/Changelog as first-class sources | These should not depend only on aggregator coverage. |
 | OPML collections | Supported | Export from RSS reader, copy from `feeds/follow.example.opml`, keep private file out of git | Good for cross-device and multi-agent workflows. |
 | Public JSON APIs | Supported by custom Python fetchers | Add a `fetch_*` function in `scripts/update_news.py` and register it in the task list | Use only stable APIs with timestamps. |
 | Public static pages | Supported by custom Python fetchers | Parse with `requests` + BeautifulSoup and normalize titles/URLs/times | Avoid fragile selectors when possible. |
@@ -39,6 +40,28 @@ Add a source only when it passes most of these checks:
 - Does not require private cookies, login sessions, browser automation, or secrets.
 - Can be fetched politely by GitHub Actions without heavy rate limits.
 - Adds coverage not already represented by stronger sources.
+
+## Built-In Official Nodes
+
+The public site should directly track these high-signal official sources:
+
+- OpenAI News RSS
+- Anthropic News page
+- Google DeepMind RSS
+- Google AI Blog RSS
+- Hugging Face Blog RSS
+- GitHub AI & ML RSS
+- GitHub Changelog RSS
+
+Aggregator sites may already surface some of these updates, but they are not
+guaranteed to be complete or timely. Keep these official sources as a stable
+baseline, then let the aggregator layer add breadth.
+
+## Disabled Default Sources
+
+- **AI今日热榜 / aihot.today**: kept as a fetcher in code, but not registered
+  as a default source because GitHub Actions runners can receive Cloudflare
+  `403 Forbidden` responses. Re-enable only if it becomes stable from Actions.
 
 ## Personal Source Workflow
 

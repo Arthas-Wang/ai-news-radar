@@ -8,6 +8,7 @@ from scripts.update_news import (
     maybe_fix_mojibake,
     normalize_source_for_display,
     parse_feed_entries_via_xml,
+    parse_anthropic_news_items,
 )
 
 
@@ -19,6 +20,16 @@ class TopicFilterTests(unittest.TestCase):
             "source": "Hacker News",
             "title": "OpenAI releases new GPT model",
             "url": "https://example.com/ai",
+        }
+        self.assertTrue(is_ai_related_record(rec))
+
+    def test_accepts_copilot_keyword(self):
+        rec = {
+            "site_id": "official_ai",
+            "site_name": "Official AI Updates",
+            "source": "GitHub Changelog",
+            "title": "GitHub Copilot adds a new coding agent",
+            "url": "https://example.com/copilot",
         }
         self.assertTrue(is_ai_related_record(rec))
 
@@ -86,6 +97,20 @@ class TopicFilterTests(unittest.TestCase):
         items = parse_feed_entries_via_xml(xml)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["title"], "A")
+
+    def test_parse_anthropic_news_items(self):
+        html = """
+        <a href="/news/claude-opus-4-7">
+          <time>Apr 16, 2026</time>
+          <h2>Introducing Claude Opus 4.7</h2>
+        </a>
+        <a href="/news">News</a>
+        """
+        items = parse_anthropic_news_items(html, now=None)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].source, "Anthropic News")
+        self.assertEqual(items[0].title, "Introducing Claude Opus 4.7")
+        self.assertEqual(items[0].url, "https://www.anthropic.com/news/claude-opus-4-7")
 
     def test_hubtoday_placeholder_title(self):
         self.assertTrue(is_hubtoday_placeholder_title("详情见官方介绍(AI资讯)"))

@@ -28,7 +28,8 @@
 
 ### 2. 主要能力
 
-- 10 个网页源聚合（TechURLs / Buzzing / Info Flow / BestBlogs / TopHub / Zeli / AI HubToday / AIbase / AI今日热榜 / NewsNow）
+- 官方 AI 节点直连（OpenAI / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI）
+- 9 个聚合源补充覆盖（TechURLs / Buzzing / Info Flow / BestBlogs / TopHub / Zeli / AI HubToday / AIbase / NewsNow）
 - OPML RSS 批量接入（私有文件 `feeds/follow.opml`，仓库提供模板 `feeds/follow.example.opml`）
 - 24h 双视图：`AI强相关` / `全量`
 - 全量模式去重开关
@@ -132,6 +133,8 @@ You only need to run one command, or let GitHub Actions run it on schedule.
 ### 2. Core features
 
 - Multi-source web aggregation
+- First-class official AI update sources (OpenAI / Anthropic / Google DeepMind / Google AI / Hugging Face / GitHub AI)
+- 9 aggregator sources for breadth (TechURLs / Buzzing / Info Flow / BestBlogs / TopHub / Zeli / AI HubToday / AIbase / NewsNow)
 - OPML RSS ingestion (private `feeds/follow.opml`; template provided as `feeds/follow.example.opml`)
 - 24h two-mode UI (`AI-focused` / `All`)
 - Dedup toggle in All mode, dedup-by-default in AI mode
