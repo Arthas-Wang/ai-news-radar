@@ -6,6 +6,7 @@ from scripts.update_news import (
     build_latest_payloads,
     dedupe_items_by_title_url,
     fetch_agentmail_digest,
+    fetch_aihot,
     is_ai_related_record,
     is_hubtoday_generic_anchor_title,
     is_hubtoday_placeholder_title,
@@ -185,6 +186,38 @@ class TopicFilterTests(unittest.TestCase):
         self.assertEqual(items[0].site_name, "AI HOT")
         self.assertEqual(items[0].title, "OpenAI ships a new Codex feature")
         self.assertEqual(items[0].url, "https://example.com/codex")
+
+    def test_fetch_aihot_uses_fallback_when_primary_has_no_items(self):
+        empty_xml = b"<?xml version='1.0'?><rss><channel><title>AI HOT</title></channel></rss>"
+        fallback_xml = """<?xml version='1.0' encoding='UTF-8'?>
+<rss><channel><title>AI HOT — 精选</title>
+<item>
+<title>Fallback AI HOT item</title>
+<link>https://example.com/fallback</link>
+<pubDate>Mon, 11 May 2026 04:53:06 GMT</pubDate>
+</item>
+</channel></rss>""".encode("utf-8")
+
+        class FakeResponse:
+            def __init__(self, content):
+                self.content = content
+
+            def raise_for_status(self):
+                return None
+
+        class FakeSession:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, url, **kwargs):
+                self.calls.append(url)
+                return FakeResponse(empty_xml if len(self.calls) == 1 else fallback_xml)
+
+        session = FakeSession()
+        items = fetch_aihot(session, now=None)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "Fallback AI HOT item")
+        self.assertEqual(items[0].meta["feed_url"], session.calls[1])
 
     def test_parse_follow_builders_items(self):
         feeds = {

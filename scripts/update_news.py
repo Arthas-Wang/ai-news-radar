@@ -112,6 +112,11 @@ OFFICIAL_AI_FEEDS: tuple[dict[str, str], ...] = (
 OFFICIAL_AI_MAX_AGE_DAYS = 45
 AIBREAKFAST_JINA_URL = "https://r.jina.ai/https://aibreakfast.beehiiv.com/"
 AIHOT_FEED_URL = "https://aihot.virxact.com/feed.xml"
+AIHOT_FALLBACK_FEED_URLS = (
+    "https://aihot.virxact.com/rss.xml",
+    "https://aihot.virxact.com/feed",
+    "https://aihot.virxact.com/feed/daily.xml",
+)
 FOLLOW_BUILDERS_FEED_BASE = "https://raw.githubusercontent.com/zarazhangrui/follow-builders/main"
 AGENTMAIL_API_BASE_DEFAULT = "https://api.agentmail.to"
 AGENTMAIL_DIGEST_FILE = "email-digest.json"
@@ -1611,7 +1616,7 @@ def fetch_aibase(session: requests.Session, now: datetime) -> list[RawItem]:
     return out
 
 
-def parse_aihot_feed_items(feed_content: bytes, now: datetime) -> list[RawItem]:
+def parse_aihot_feed_items(feed_content: bytes, now: datetime, feed_url: str = AIHOT_FEED_URL) -> list[RawItem]:
     site_id = "aihot"
     site_name = "AI HOT"
     source_name = site_name
@@ -1654,7 +1659,7 @@ def parse_aihot_feed_items(feed_content: bytes, now: datetime) -> list[RawItem]:
                 title=title,
                 url=link,
                 published_at=published,
-                meta={"feed_url": AIHOT_FEED_URL},
+                meta={"feed_url": feed_url},
             )
         )
 
@@ -1662,17 +1667,27 @@ def parse_aihot_feed_items(feed_content: bytes, now: datetime) -> list[RawItem]:
 
 
 def fetch_aihot(session: requests.Session, now: datetime) -> list[RawItem]:
-    r = session.get(
-        AIHOT_FEED_URL,
-        timeout=30,
-        headers={
-            "User-Agent": BROWSER_UA,
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Accept": "application/rss+xml, application/xml, text/xml, */*",
-        },
-    )
-    r.raise_for_status()
-    return parse_aihot_feed_items(r.content, now)
+    last_error: Exception | None = None
+    for feed_url in (AIHOT_FEED_URL, *AIHOT_FALLBACK_FEED_URLS):
+        try:
+            r = session.get(
+                feed_url,
+                timeout=30,
+                headers={
+                    "User-Agent": BROWSER_UA,
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+                },
+            )
+            r.raise_for_status()
+            items = parse_aihot_feed_items(r.content, now, feed_url=feed_url)
+            if items:
+                return items
+        except Exception as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    return []
 
 
 def extract_newsnow_source_ids(js: str) -> list[str]:

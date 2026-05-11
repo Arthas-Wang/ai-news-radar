@@ -86,7 +86,8 @@ baseline, then let the aggregator layer add breadth.
 - **AI Breakfast**: reads the public Beehiiv archive through Jina Reader because
   the original Beehiiv feed can be blocked from GitHub Actions.
 - **AI HOT**: reads the public RSS feed at `https://aihot.virxact.com/feed.xml`,
-  using stable item timestamps and canonical outbound links.
+  with equivalent Virxact RSS endpoints as fallbacks if the primary endpoint
+  temporarily returns zero parseable items.
 
 ## Disabled Default Sources
 
@@ -108,23 +109,25 @@ and AgentMail budget notes.
 
 ## Example OPML Seeds
 
-`feeds/follow.example.opml` now includes the first approved low-risk example set
-from the 2026-05-10 source-intake review:
+`feeds/follow.example.opml` contains a public, low-risk demo set that is expected
+to pass through the real project fetch path on GitHub Actions:
 
-- **Official examples**: OpenAI News and Hugging Face Blog.
-- **AI media / builder feeds**: Wired AI, InfoQ CN, 宝玉, and Simon Willison.
-- **AI newsletters**: AI For Developers, True Positive Weekly, AI Evaluation,
-  and BuzzRobot.
+- **Official examples**: OpenAI News, Hugging Face Blog, Google DeepMind Blog,
+  Google AI Blog, and Microsoft AI Blog.
+- **AI media / builder feeds**: Wired AI, InfoQ CN, NVIDIA Generative AI Blog,
+  宝玉, and Simon Willison.
 
 In GitHub Actions, `feeds/follow.example.opml` is also used as the public demo
 fallback when no private `FOLLOW_OPML_B64` secret is configured. This keeps the
 hosted page visibly proving that RSS/OPML import works without requiring any
 private subscriptions. Maintainers can override it by setting `FOLLOW_OPML_B64`.
-QbitAI remains on the watchlist because the direct feed probed via `urllib` but
-returned `403 Forbidden` through the project fetch path. Broad sources such as
-TechCrunch, Hacker News frontpage, general hot lists, X bridges, and WeChat
-bridges remain outside the example file unless the maintainer explicitly accepts
-the extra filtering and maintenance risk.
+Substack newsletters are intentionally excluded from the public demo OPML because
+GitHub Actions runners can receive `403 Forbidden` even when the same feeds work
+locally. QbitAI remains on the watchlist because the direct feed probed via
+`urllib` but returned `403 Forbidden` through the project fetch path. Broad
+sources such as TechCrunch, Hacker News frontpage, general hot lists, X bridges,
+and WeChat bridges remain outside the example file unless the maintainer
+explicitly accepts the extra filtering and maintenance risk.
 
 ## Personal Source Workflow
 
