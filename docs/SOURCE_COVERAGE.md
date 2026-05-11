@@ -85,12 +85,44 @@ baseline, then let the aggregator layer add breadth.
   X API credentials.
 - **AI Breakfast**: reads the public Beehiiv archive through Jina Reader because
   the original Beehiiv feed can be blocked from GitHub Actions.
+- **AI HOT**: reads the public RSS feed at `https://aihot.virxact.com/feed.xml`,
+  using stable item timestamps and canonical outbound links.
 
 ## Disabled Default Sources
 
-- **AI今日热榜 / aihot.today**: kept as a fetcher in code, but not registered
-  as a default source because GitHub Actions runners can receive Cloudflare
-  `403 Forbidden` responses. Re-enable only if it becomes stable from Actions.
+- **X API direct recent search**: supported as an advanced, secret-backed adapter
+  through `X_API_ENABLED=1` and `X_BEARER_TOKEN`, but disabled by default because
+  current official X API docs describe paid read credits rather than a free daily
+  read quota. Use `X_API_MAX_RESULTS`, `X_API_DAILY_POST_LIMIT`, and
+  `X_API_RUN_UTC_HOUR` to cap usage.
+- **AgentMail digest**: supported as an advanced, secret-backed metadata digest
+  through `EMAIL_DIGEST_ENABLED=1`, `AGENTMAIL_API_KEY`, and
+  `AGENTMAIL_INBOX_ID`, but disabled by default. It deliberately lists messages
+  only and does not publish body text, raw `.eml`, full email addresses, or
+  secrets. For a single-newsletter demo, set
+  `AGENTMAIL_ALLOWED_SENDER_DOMAINS=alphasignal.ai` to keep shared-inbox output
+  scoped to AlphaSignal metadata.
+
+See `docs/research/advanced-source-free-tier-budget-2026-05-10.md` for the X API
+and AgentMail budget notes.
+
+## Example OPML Seeds
+
+`feeds/follow.example.opml` now includes the first approved low-risk example set
+from the 2026-05-10 source-intake review:
+
+- **Official examples**: OpenAI News and Hugging Face Blog.
+- **AI media / builder feeds**: Wired AI, InfoQ CN, 宝玉, and Simon Willison.
+- **AI newsletters**: AI For Developers, True Positive Weekly, AI Evaluation,
+  and BuzzRobot.
+
+These entries are examples for maintainers who copy the file to
+`feeds/follow.opml`; they do **not** change the public default source list by
+themselves. QbitAI remains on the watchlist because the direct feed probed via
+`urllib` but returned `403 Forbidden` through the project fetch path. Broad
+sources such as TechCrunch, Hacker News frontpage, general hot lists, X bridges,
+and WeChat bridges remain outside the example file unless the maintainer
+explicitly accepts the extra filtering and maintenance risk.
 
 ## Personal Source Workflow
 

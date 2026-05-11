@@ -10,9 +10,11 @@ from scripts.update_news import (
     is_hubtoday_generic_anchor_title,
     is_hubtoday_placeholder_title,
     maybe_fetch_agentmail_digest,
+    maybe_fetch_x_api_updates,
     maybe_fix_mojibake,
     normalize_source_for_display,
     parse_ai_breakfast_items,
+    parse_aihot_feed_items,
     parse_feed_entries_via_xml,
     parse_anthropic_news_items,
     parse_follow_builders_items,
@@ -167,6 +169,23 @@ class TopicFilterTests(unittest.TestCase):
         self.assertEqual(items[0].title, "Anthropic update lands")
         self.assertEqual(items[0].url, "https://aibreakfast.beehiiv.com/p/anthropic-update-lands")
 
+    def test_parse_aihot_feed_items(self):
+        xml = """<?xml version='1.0' encoding='UTF-8'?>
+<rss><channel><title>AI HOT — 精选</title>
+<item>
+<title>OpenAI ships a new Codex feature</title>
+<link>https://example.com/codex</link>
+<pubDate>Mon, 11 May 2026 02:05:04 GMT</pubDate>
+<author>noreply@aihot.virxact.com (X：Builder)</author>
+</item>
+</channel></rss>""".encode("utf-8")
+        items = parse_aihot_feed_items(xml, now=None)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].site_id, "aihot")
+        self.assertEqual(items[0].site_name, "AI HOT")
+        self.assertEqual(items[0].title, "OpenAI ships a new Codex feature")
+        self.assertEqual(items[0].url, "https://example.com/codex")
+
     def test_parse_follow_builders_items(self):
         feeds = {
             "x": {
@@ -315,6 +334,33 @@ class TopicFilterTests(unittest.TestCase):
         self.assertNotIn("EXTRACTED BODY", dumped)
         self.assertNotIn("private-client", dumped)
 
+    def test_agentmail_digest_can_filter_single_sender_domain(self):
+        payload = build_agentmail_digest_payload(
+            [
+                {
+                    "message_id": "msg_alpha",
+                    "timestamp": "2026-05-03T00:00:00Z",
+                    "from": "AlphaSignal <daily@mail.alphasignal.ai>",
+                    "subject": "AI research digest",
+                    "preview": "New papers and repos",
+                },
+                {
+                    "message_id": "msg_other",
+                    "timestamp": "2026-05-03T00:00:00Z",
+                    "from": "Other Newsletter <news@example.com>",
+                    "subject": "Should not be included",
+                    "preview": "Noise",
+                },
+            ],
+            generated_at="2026-05-03T01:00:00Z",
+            window_hours=24,
+            allowed_sender_domains=["alphasignal.ai"],
+        )
+        self.assertEqual(payload["allowed_sender_domains"], ["alphasignal.ai"])
+        self.assertEqual(payload["total_messages"], 1)
+        self.assertEqual(payload["items"][0]["sender_domain"], "mail.alphasignal.ai")
+        self.assertIn("AI research digest", payload["items"][0]["subject"])
+
     def test_fetch_agentmail_digest_uses_list_messages_endpoint_only(self):
         class FakeResponse:
             def raise_for_status(self):
@@ -403,6 +449,83 @@ class TopicFilterTests(unittest.TestCase):
         self.assertFalse(status["ok"])
         self.assertEqual(status["error"], "missing_agentmail_credentials")
         self.assertEqual(session.calls, 0)
+
+    def test_x_api_default_off_does_not_request_network(self):
+        class NoNetworkSession:
+            def __init__(self):
+                self.calls = 0
+
+            def get(self, *args, **kwargs):
+                self.calls += 1
+                raise AssertionError("X API should stay offline unless explicitly enabled")
+
+        session = NoNetworkSession()
+        with patch.dict("os.environ", {}, clear=True):
+            items, status = maybe_fetch_x_api_updates(session, __import__("datetime").datetime.fromisoformat("2026-05-03T01:00:00+00:00"))
+        self.assertEqual(items, [])
+        self.assertFalse(status["enabled"])
+        self.assertEqual(session.calls, 0)
+
+    def test_x_api_enabled_outside_daily_window_does_not_request_network(self):
+        class NoNetworkSession:
+            def __init__(self):
+                self.calls = 0
+
+            def get(self, *args, **kwargs):
+                self.calls += 1
+                raise AssertionError("X API should wait for its daily run window")
+
+        session = NoNetworkSession()
+        env = {"X_API_ENABLED": "1", "X_BEARER_TOKEN": "test", "X_API_RUN_UTC_HOUR": "0"}
+        with patch.dict("os.environ", env, clear=True):
+            items, status = maybe_fetch_x_api_updates(session, __import__("datetime").datetime.fromisoformat("2026-05-03T01:00:00+00:00"))
+        self.assertEqual(items, [])
+        self.assertTrue(status["enabled"])
+        self.assertTrue(status["skipped"])
+        self.assertEqual(status["skip_reason"], "outside_x_api_daily_window")
+        self.assertEqual(session.calls, 0)
+
+    def test_x_api_force_run_maps_recent_search_posts(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "data": [
+                        {
+                            "id": "12345",
+                            "author_id": "u1",
+                            "text": "OpenAI ships a useful AI agent update",
+                            "created_at": "2026-05-03T00:00:00Z",
+                            "lang": "en",
+                            "public_metrics": {"like_count": 10},
+                        }
+                    ],
+                    "includes": {"users": [{"id": "u1", "username": "builder"}]},
+                }
+
+        class FakeSession:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, url, **kwargs):
+                self.calls.append((url, kwargs))
+                return FakeResponse()
+
+        session = FakeSession()
+        env = {"X_API_ENABLED": "1", "X_BEARER_TOKEN": "test", "X_API_FORCE_RUN": "1", "X_API_MAX_RESULTS": "10"}
+        with patch.dict("os.environ", env, clear=True):
+            items, status = maybe_fetch_x_api_updates(session, __import__("datetime").datetime.fromisoformat("2026-05-03T01:00:00+00:00"))
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["item_count"], 1)
+        self.assertEqual(status["estimated_cost_usd"], 0.005)
+        self.assertEqual(items[0].site_id, "xapi")
+        self.assertEqual(items[0].source, "@builder")
+        self.assertEqual(items[0].url, "https://x.com/builder/status/12345")
+        url, kwargs = session.calls[0]
+        self.assertEqual(url, "https://api.x.com/2/tweets/search/recent")
+        self.assertEqual(kwargs["params"]["max_results"], 10)
 
 
 if __name__ == "__main__":

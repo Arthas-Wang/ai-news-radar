@@ -111,10 +111,16 @@ OFFICIAL_AI_FEEDS: tuple[dict[str, str], ...] = (
 )
 OFFICIAL_AI_MAX_AGE_DAYS = 45
 AIBREAKFAST_JINA_URL = "https://r.jina.ai/https://aibreakfast.beehiiv.com/"
+AIHOT_FEED_URL = "https://aihot.virxact.com/feed.xml"
 FOLLOW_BUILDERS_FEED_BASE = "https://raw.githubusercontent.com/zarazhangrui/follow-builders/main"
 AGENTMAIL_API_BASE_DEFAULT = "https://api.agentmail.to"
 AGENTMAIL_DIGEST_FILE = "email-digest.json"
 AGENTMAIL_DEFAULT_LIMIT = 50
+X_API_BASE_DEFAULT = "https://api.x.com"
+X_API_POST_READ_COST_USD = 0.005
+X_API_DEFAULT_QUERY = '(AI OR "artificial intelligence" OR "large language model" OR LLM) lang:en -is:retweet has:links'
+X_API_DEFAULT_MAX_RESULTS = 20
+X_API_MAX_QUERY_CHARS = 512
 
 
 @dataclass
@@ -1605,64 +1611,68 @@ def fetch_aibase(session: requests.Session, now: datetime) -> list[RawItem]:
     return out
 
 
-def fetch_aihot(session: requests.Session, now: datetime) -> list[RawItem]:
+def parse_aihot_feed_items(feed_content: bytes, now: datetime) -> list[RawItem]:
     site_id = "aihot"
-    site_name = "AI今日热榜"
-
-    r = session.get("https://aihot.today/", timeout=30)
-    r.raise_for_status()
-    initial_data = None
-    source_list = None
-
-    decoded = extract_next_f_merged(r.text)
-    if decoded:
-        try:
-            initial_data = extract_balanced_json(decoded, "initialDataMap")
-            source_list = extract_balanced_json(decoded, "dataSources")
-        except Exception:
-            initial_data = None
-            source_list = None
-
-    if initial_data is None or source_list is None:
-        next_data = extract_next_data_payload(r.text) or {}
-        page_props = (
-            next_data.get("props", {})
-            .get("pageProps", {})
-        )
-        if isinstance(page_props.get("initialDataMap"), dict):
-            initial_data = page_props.get("initialDataMap")
-        if isinstance(page_props.get("dataSources"), list):
-            source_list = page_props.get("dataSources")
-
-    if initial_data is None or source_list is None:
-        return []
-
-    source_map = {str(s.get("id")): s.get("title", str(s.get("id"))) for s in source_list if isinstance(s, dict)}
+    site_name = "AI HOT"
+    source_name = site_name
+    if feedparser is not None:
+        parsed = feedparser.parse(feed_content)
+        entries = list(parsed.entries)
+        source_name = first_non_empty(getattr(parsed, "feed", {}).get("title"), site_name)
+    else:
+        entries = parse_feed_entries_via_xml(feed_content)
 
     out: list[RawItem] = []
-    for source_id, items in initial_data.items():
-        source_name = maybe_fix_mojibake(source_map.get(str(source_id), str(source_id)))
-        if not isinstance(items, list):
+    seen_urls: set[str] = set()
+    for entry in entries:
+        title = maybe_fix_mojibake(str(entry.get("title") or "").strip())
+        link = str(entry.get("link") or "").strip()
+        if not title or not link:
             continue
-        for item in items:
-            title = maybe_fix_mojibake(str(item.get("title_trans") or item.get("title") or "").strip())
-            link = str(item.get("link") or "").strip()
-            if not title or not link:
-                continue
-            published = parse_date_any(item.get("publish_time"), now) or now
-            out.append(
-                RawItem(
-                    site_id=site_id,
-                    site_name=site_name,
-                    source=source_name,
-                    title=title,
-                    url=link,
-                    published_at=published,
-                    meta={"raw_source_id": source_id},
-                )
+        normalized_url = normalize_url(link)
+        if normalized_url in seen_urls:
+            continue
+        seen_urls.add(normalized_url)
+        published = (
+            parse_date_any(entry.get("published"), now)
+            or parse_date_any(entry.get("updated"), now)
+            or parse_date_any(entry.get("pubDate"), now)
+        )
+        if not published:
+            continue
+        author_detail = entry.get("author_detail") or {}
+        entry_source = first_non_empty(
+            author_detail.get("name") if isinstance(author_detail, dict) else "",
+            entry.get("author"),
+            source_name,
+        )
+        out.append(
+            RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=maybe_fix_mojibake(entry_source),
+                title=title,
+                url=link,
+                published_at=published,
+                meta={"feed_url": AIHOT_FEED_URL},
             )
+        )
 
     return out
+
+
+def fetch_aihot(session: requests.Session, now: datetime) -> list[RawItem]:
+    r = session.get(
+        AIHOT_FEED_URL,
+        timeout=30,
+        headers={
+            "User-Agent": BROWSER_UA,
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        },
+    )
+    r.raise_for_status()
+    return parse_aihot_feed_items(r.content, now)
 
 
 def extract_newsnow_source_ids(js: str) -> list[str]:
@@ -1831,6 +1841,7 @@ def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem]
         ("zeli", "Zeli", fetch_zeli),
         ("aihubtoday", "AI HubToday", fetch_ai_hubtoday),
         ("aibase", "AIbase", fetch_aibase),
+        ("aihot", "AI HOT", fetch_aihot),
         ("newsnow", "NewsNow", fetch_newsnow),
     ]
 
@@ -2279,6 +2290,36 @@ def sender_domain_from_address(raw_sender: str) -> str | None:
     return domain or None
 
 
+def parse_domain_filter(raw: str) -> list[str]:
+    """Parse a comma-separated sender-domain allowlist for private newsletter demos."""
+    domains: list[str] = []
+    for part in re.split(r"[,\s]+", str(raw or "")):
+        domain = part.strip().lower().lstrip("@")
+        if domain and re.match(r"^[a-z0-9.-]+\.[a-z]{2,}$", domain):
+            domains.append(domain)
+    return sorted(set(domains))
+
+
+def domain_matches_filter(sender_domain: str | None, allowed_domains: list[str]) -> bool:
+    if not allowed_domains:
+        return True
+    domain = str(sender_domain or "").lower().strip()
+    return any(domain == allowed or domain.endswith(f".{allowed}") for allowed in allowed_domains)
+
+
+def filter_agentmail_messages_by_domain(
+    messages: list[dict[str, Any]],
+    allowed_domains: list[str],
+) -> list[dict[str, Any]]:
+    if not allowed_domains:
+        return messages
+    return [
+        msg
+        for msg in messages
+        if domain_matches_filter(sender_domain_from_address(str(msg.get("from") or "")), allowed_domains)
+    ]
+
+
 def safe_agentmail_item(message: dict[str, Any]) -> dict[str, Any]:
     """Convert an AgentMail MessageItem into a metadata-only public digest item."""
     message_id = str(message.get("message_id") or "")
@@ -2302,9 +2343,11 @@ def build_agentmail_digest_payload(
     messages: list[dict[str, Any]],
     generated_at: str,
     window_hours: int,
+    allowed_sender_domains: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a privacy-preserving digest from AgentMail list-message results."""
-    items = [safe_agentmail_item(msg) for msg in messages]
+    filtered_messages = filter_agentmail_messages_by_domain(messages, allowed_sender_domains or [])
+    items = [safe_agentmail_item(msg) for msg in filtered_messages]
     return sanitize_public_payload(
         {
             "generated_at": generated_at,
@@ -2312,6 +2355,7 @@ def build_agentmail_digest_payload(
             "enabled": True,
             "window_hours": window_hours,
             "privacy": "metadata_only_no_body",
+            "allowed_sender_domains": allowed_sender_domains or [],
             "total_messages": len(items),
             "items": items,
         }
@@ -2327,6 +2371,7 @@ def fetch_agentmail_digest(
     limit: int = AGENTMAIL_DEFAULT_LIMIT,
     base_url: str = AGENTMAIL_API_BASE_DEFAULT,
     window_hours: int = 24,
+    allowed_sender_domains: list[str] | None = None,
 ) -> dict[str, Any]:
     """Fetch AgentMail MessageItem metadata; deliberately does not request bodies or raw .eml."""
     base = (base_url or AGENTMAIL_API_BASE_DEFAULT).rstrip("/")
@@ -2349,7 +2394,12 @@ def fetch_agentmail_digest(
     messages = payload.get("messages") if isinstance(payload, dict) else []
     if not isinstance(messages, list):
         messages = []
-    return build_agentmail_digest_payload(messages, generated_at=generated_at, window_hours=window_hours)
+    return build_agentmail_digest_payload(
+        messages,
+        generated_at=generated_at,
+        window_hours=window_hours,
+        allowed_sender_domains=allowed_sender_domains,
+    )
 
 
 def env_flag(name: str) -> bool:
@@ -2359,6 +2409,13 @@ def env_flag(name: str) -> bool:
 def env_int(name: str, default: int) -> int:
     try:
         return int(str(os.environ.get(name) or default).strip() or default)
+    except ValueError:
+        return default
+
+
+def env_float(name: str, default: float) -> float:
+    try:
+        return float(str(os.environ.get(name) or default).strip() or default)
     except ValueError:
         return default
 
@@ -2384,6 +2441,8 @@ def maybe_fetch_agentmail_digest(
     agentmail_inbox_id = str(os.environ.get("AGENTMAIL_INBOX_ID") or "").strip()
     agentmail_base_url = str(os.environ.get("AGENTMAIL_API_BASE_URL") or AGENTMAIL_API_BASE_DEFAULT).strip()
     agentmail_limit = env_int("AGENTMAIL_LIMIT", AGENTMAIL_DEFAULT_LIMIT)
+    allowed_sender_domains = parse_domain_filter(str(os.environ.get("AGENTMAIL_ALLOWED_SENDER_DOMAINS") or ""))
+    status["allowed_sender_domains"] = allowed_sender_domains
     if not (agentmail_api_key and agentmail_inbox_id):
         status["ok"] = False
         status["error"] = "missing_agentmail_credentials"
@@ -2399,6 +2458,7 @@ def maybe_fetch_agentmail_digest(
             limit=agentmail_limit,
             base_url=agentmail_base_url,
             window_hours=window_hours,
+            allowed_sender_domains=allowed_sender_domains,
         )
         status["ok"] = True
         status["item_count"] = int(payload.get("total_messages") or 0)
@@ -2407,6 +2467,144 @@ def maybe_fetch_agentmail_digest(
         status["ok"] = False
         status["error"] = type(exc).__name__
         return None, status
+
+
+def x_api_should_run_now(now: datetime) -> bool:
+    """Gate paid X API reads so a 30-minute cron does not spend every run."""
+    if env_flag("X_API_FORCE_RUN"):
+        return True
+    run_hour = max(0, min(env_int("X_API_RUN_UTC_HOUR", 0), 23))
+    minute_max = max(0, min(env_int("X_API_RUN_UTC_MINUTE_MAX", 10), 59))
+    return now.astimezone(UTC).hour == run_hour and now.astimezone(UTC).minute <= minute_max
+
+
+def x_api_status_base(now: datetime) -> dict[str, Any]:
+    daily_post_limit = max(0, env_int("X_API_DAILY_POST_LIMIT", X_API_DEFAULT_MAX_RESULTS))
+    max_results = max(10, min(env_int("X_API_MAX_RESULTS", X_API_DEFAULT_MAX_RESULTS), 100))
+    effective_cap = min(max_results, daily_post_limit) if daily_post_limit else 0
+    return {
+        "enabled": env_flag("X_API_ENABLED"),
+        "ok": None,
+        "item_count": 0,
+        "privacy": "public_posts_metadata_only",
+        "published_by_default": False,
+        "official_free_read_quota": False,
+        "unit_cost_usd_per_post_read": X_API_POST_READ_COST_USD,
+        "daily_post_limit": daily_post_limit,
+        "max_results_per_run": max_results,
+        "effective_result_cap": effective_cap,
+        "estimated_max_cost_usd_per_run": round(effective_cap * X_API_POST_READ_COST_USD, 4),
+        "run_utc_hour": max(0, min(env_int("X_API_RUN_UTC_HOUR", 0), 23)),
+        "generated_date_utc": now.astimezone(UTC).date().isoformat(),
+    }
+
+
+def fetch_x_api_recent_search(
+    session: requests.Session,
+    bearer_token: str,
+    query: str,
+    now: datetime,
+    max_results: int,
+    base_url: str = X_API_BASE_DEFAULT,
+) -> list[RawItem]:
+    """Fetch public recent-search Posts from X API v2; no writes and no DMs."""
+    query = re.sub(r"\s+", " ", (query or X_API_DEFAULT_QUERY).strip())
+    if len(query) > X_API_MAX_QUERY_CHARS:
+        raise ValueError("x_query_too_long")
+    capped_max_results = max(10, min(int(max_results or X_API_DEFAULT_MAX_RESULTS), 100))
+    url = f"{(base_url or X_API_BASE_DEFAULT).rstrip('/')}/2/tweets/search/recent"
+    response = session.get(
+        url,
+        headers={"Authorization": f"Bearer {bearer_token}"},
+        params={
+            "query": query,
+            "max_results": capped_max_results,
+            "tweet.fields": "created_at,author_id,public_metrics,lang",
+            "expansions": "author_id",
+            "user.fields": "username,name,verified",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    users = {
+        str(user.get("id")): user
+        for user in (payload.get("includes", {}) or {}).get("users", [])
+        if isinstance(user, dict) and user.get("id")
+    }
+    out: list[RawItem] = []
+    for post in payload.get("data") or []:
+        if not isinstance(post, dict):
+            continue
+        post_id = str(post.get("id") or "").strip()
+        text = compact_public_snippet(str(post.get("text") or ""), max_chars=220)
+        if not (post_id and text):
+            continue
+        user = users.get(str(post.get("author_id") or ""), {})
+        username = str(user.get("username") or "i/web").strip() or "i/web"
+        published = parse_iso(str(post.get("created_at") or "")) or now
+        out.append(
+            RawItem(
+                site_id="xapi",
+                site_name="X API",
+                source=f"@{username}",
+                title=text,
+                url=f"https://x.com/{username}/status/{post_id}",
+                published_at=published,
+                meta={
+                    "post_id": post_id,
+                    "lang": post.get("lang"),
+                    "public_metrics": post.get("public_metrics") or {},
+                },
+            )
+        )
+    return out
+
+
+def maybe_fetch_x_api_updates(
+    session: requests.Session,
+    now: datetime,
+) -> tuple[list[RawItem], dict[str, Any]]:
+    """Fetch X only when explicitly enabled, credentialed, scheduled, and capped."""
+    status = x_api_status_base(now)
+    if not status["enabled"]:
+        return [], status
+
+    if status["effective_result_cap"] < 10:
+        status["ok"] = False
+        status["error"] = "x_daily_post_limit_below_api_minimum"
+        return [], status
+
+    if not x_api_should_run_now(now):
+        status["skipped"] = True
+        status["skip_reason"] = "outside_x_api_daily_window"
+        return [], status
+
+    bearer_token = str(os.environ.get("X_BEARER_TOKEN") or os.environ.get("X_API_BEARER_TOKEN") or "").strip()
+    if not bearer_token:
+        status["ok"] = False
+        status["error"] = "missing_x_bearer_token"
+        return [], status
+
+    query = str(os.environ.get("X_API_QUERY") or X_API_DEFAULT_QUERY).strip()
+    base_url = str(os.environ.get("X_API_BASE_URL") or X_API_BASE_DEFAULT).strip()
+    try:
+        items = fetch_x_api_recent_search(
+            session,
+            bearer_token=bearer_token,
+            query=query,
+            now=now,
+            max_results=int(status["effective_result_cap"]),
+            base_url=base_url,
+        )
+        status["ok"] = True
+        status["item_count"] = len(items)
+        status["estimated_cost_usd"] = round(len(items) * X_API_POST_READ_COST_USD, 4)
+        return items, status
+    except Exception as exc:
+        status["ok"] = False
+        status["error"] = type(exc).__name__
+        return [], status
 
 
 def has_mojibake_noise(text: str) -> bool:
@@ -2653,6 +2851,21 @@ def main() -> int:
         after=iso(now - timedelta(hours=args.window_hours)),
         window_hours=args.window_hours,
     )
+    x_api_items, x_api_status = maybe_fetch_x_api_updates(session, now)
+    if x_api_status.get("enabled"):
+        raw_items.extend(x_api_items)
+        statuses.append(
+            {
+                "site_id": "xapi",
+                "site_name": "X API",
+                "ok": bool(x_api_status.get("ok")) if x_api_status.get("ok") is not None else True,
+                "item_count": int(x_api_status.get("item_count") or 0),
+                "duration_ms": 0,
+                "error": x_api_status.get("error"),
+                "skipped": bool(x_api_status.get("skipped")),
+                "skip_reason": x_api_status.get("skip_reason"),
+            }
+        )
 
     if args.rss_opml:
         opml_path = Path(args.rss_opml).expanduser()
@@ -2865,6 +3078,7 @@ def main() -> int:
             "feeds": rss_feed_statuses,
         },
         "agentmail": agentmail_status,
+        "x_api": x_api_status,
     }
 
     try:

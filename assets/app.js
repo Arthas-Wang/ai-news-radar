@@ -48,6 +48,7 @@ const SOURCE_KINDS = {
   official_ai: { label: "官方", tone: "official" },
   aibreakfast: { label: "日报", tone: "newsletter" },
   followbuilders: { label: "Builders/X", tone: "builders" },
+  xapi: { label: "X API", tone: "builders" },
   techurls: { label: "聚合", tone: "aggregate" },
   buzzing: { label: "聚合", tone: "aggregate" },
   iris: { label: "聚合", tone: "aggregate" },
@@ -136,6 +137,8 @@ function renderCoverageStrip(errorMessage = "") {
   const rows = siteRows();
   const failedSites = Array.isArray(state.sourceStatus?.failed_sites) ? state.sourceStatus.failed_sites : [];
   const rss = state.sourceStatus?.rss_opml || {};
+  const agentmail = state.sourceStatus?.agentmail || {};
+  const xApi = state.sourceStatus?.x_api || {};
   const allCount = Number(state.sourceStatus?.items_before_topic_filter || state.totalAllMode || state.itemsAll.length || 0);
   const coverageCount = Number(state.sourceStatus?.fetched_raw_items || state.totalRaw || allCount || 0);
   const officialCount = Number(siteRow("official_ai")?.item_count || 0);
@@ -145,6 +148,11 @@ function renderCoverageStrip(errorMessage = "") {
   const okSites = Number(state.sourceStatus?.successful_sites || 0);
   const opmlValue = rss.enabled ? `${fmtNumber(rss.ok_feeds || 0)}/${fmtNumber(rss.effective_feed_total || 0)}` : "OPML";
   const opmlMeta = rss.enabled ? "私有订阅已接入" : "可用 Secret 接入私有源";
+  const xApiLabel = xApi.enabled ? `X ${xApi.skipped ? "待窗口" : fmtNumber(xApi.item_count || 0)}` : "X待配置";
+  const mailLabel = agentmail.enabled ? `Mail ${fmtNumber(agentmail.item_count || 0)}` : "Mail待配置";
+  const advancedMeta = xApi.enabled || agentmail.enabled
+    ? `额度保护 · ${xApiLabel} / ${mailLabel}`
+    : "X API 与 AgentMail 默认关闭";
 
   const cards = [
     ["源健康", totalSites ? `${fmtNumber(okSites)}/${fmtNumber(totalSites)}` : "加载中", failedSites.length ? `${fmtNumber(failedSites.length)} 个失败源` : (errorMessage || "内置源正常"), failedSites.length ? "warn" : "ok"],
@@ -153,6 +161,7 @@ function renderCoverageStrip(errorMessage = "") {
     ["官方/日报源池", `${fmtNumber(officialCount + newsletterCount)} 条`, "官方节点 + AI Breakfast", "official"],
     ["Builders/X源池", `${fmtNumber(buildersCount)} 条`, "Follow Builders公开feed", "builders"],
     ["私人扩展", opmlValue, opmlMeta, "private"],
+    ["高级源", "X / Mail", advancedMeta, "private"],
   ];
 
   cards.forEach(([label, value, meta, tone]) => {
@@ -532,6 +541,8 @@ function renderSourceHealth(errorMessage = "") {
   const failedSites = Array.isArray(status.failed_sites) ? status.failed_sites : [];
   const zeroSites = Array.isArray(status.zero_item_sites) ? status.zero_item_sites : [];
   const rss = status.rss_opml || {};
+  const agentmail = status.agentmail || {};
+  const xApi = status.x_api || {};
   const failedFeeds = Array.isArray(rss.failed_feeds) ? rss.failed_feeds : [];
   const skippedFeeds = Array.isArray(rss.skipped_feeds) ? rss.skipped_feeds : [];
   const replacedFeeds = Array.isArray(rss.replaced_feeds) ? rss.replaced_feeds : [];
@@ -541,6 +552,8 @@ function renderSourceHealth(errorMessage = "") {
   metricGrid.append(
     renderMetric("内置源", `${fmtNumber(status.successful_sites || 0)}/${fmtNumber(sites.length)}`, failedSites.length ? "warn" : "ok"),
     renderMetric("RSS", rss.enabled ? `${fmtNumber(rss.ok_feeds || 0)}/${fmtNumber(rss.effective_feed_total || 0)}` : "未启用"),
+    renderMetric("X API", xApi.enabled ? (xApi.skipped ? "待窗口" : `${fmtNumber(xApi.item_count || 0)}条`) : "未启用", xApi.error ? "bad" : ""),
+    renderMetric("AgentMail", agentmail.enabled ? `${fmtNumber(agentmail.item_count || 0)}封` : "未启用", agentmail.error ? "bad" : ""),
     renderMetric("失败源", fmtNumber(failedSites.length + failedFeeds.length), failedSites.length || failedFeeds.length ? "bad" : "ok"),
     renderMetric("替换/跳过", `${fmtNumber(replacedFeeds.length)}/${fmtNumber(skippedFeeds.length)}`)
   );
