@@ -15,6 +15,8 @@ When this skill triggers inside the repo, read these files first:
 - `docs/GPT_HANDOFF.md` before release-readiness checks or handing the project
   to another agent.
 - `docs/SOURCE_COVERAGE.md` before changing source strategy.
+- `docs/ROADMAP.md` before changing Source Overlap Check, story merge, or version
+  planning.
 - `docs/V2_PRODUCT_BRIEF.md` before changing product positioning or first-screen UX.
 - `scripts/update_news.py` before changing data generation.
 - `assets/app.js`, `assets/styles.css`, and `index.html` before changing the UI.
@@ -127,6 +129,22 @@ For detailed intake checks and implementation patterns, read
 
 Only add a built-in source when it is useful to most public visitors.
 
+0. Run Source Overlap Check for candidate RSS/Atom sources before promoting them
+   into the public default layer:
+
+   ```bash
+   python scripts/evaluate_source_overlap.py \
+     --source-url https://example.com/feed.xml \
+     --source-name "Example Source" \
+     --site-id example_candidate \
+     --baseline data/archive.json \
+     --lookback-days 7 \
+     --output reports/source-intake/example-overlap.json
+   ```
+
+   Treat the report as advisory: low duplication supports `accept_default`, high
+   duplication supports `skip_duplicate`, and small samples or medium duplication
+   should stay `watchlist` / OPML advanced first.
 1. Inspect existing fetchers in `scripts/update_news.py`.
 2. Add `fetch_<source>(session, now)` returning `list[RawItem]`.
 3. Use existing helpers for URL normalization, date parsing, and sessions.

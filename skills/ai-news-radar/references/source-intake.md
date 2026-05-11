@@ -20,8 +20,9 @@ Only ask the user when the answer changes default vs advanced routing.
 1. Prefer official RSS/Atom/JSON feeds.
 2. Prefer public GitHub-generated feeds over rebuilding another project's crawler.
 3. Use OPML for private or user-specific feeds.
-4. Use a built-in fetcher only when the source improves the public default.
-5. Avoid login, cookies, browser automation, private inboxes, and committed secrets.
+4. Before making a source public-default, run the Source Overlap Check against the recent archive.
+5. Use a built-in fetcher only when the source improves the public default.
+6. Avoid login, cookies, browser automation, private inboxes, and committed secrets.
 
 ## Source Classes
 
@@ -129,6 +130,29 @@ def fetch_example(session: requests.Session, now: datetime) -> list[RawItem]:
 ```
 
 Then register it in `collect_all`, update docs, and add tests for parser behavior.
+
+## Source Overlap Check
+
+Before promoting a candidate RSS/Atom source into the public default layer, run a recent-overlap report:
+
+```bash
+python scripts/evaluate_source_overlap.py \
+  --source-url https://example.com/feed.xml \
+  --source-name "Example Source" \
+  --site-id example_candidate \
+  --baseline data/archive.json \
+  --lookback-days 7 \
+  --output reports/source-intake/example-overlap.json
+```
+
+Interpretation:
+
+- `< 35%` hard duplicate rate: usually `accept_default`.
+- `35%–65%`: keep as `watchlist` or OPML advanced source first.
+- `>= 65%`: usually `skip_duplicate` unless the source is faster, more canonical, or has unusually valuable unique items.
+- `< 5` recent candidate items: treat as too small and keep on `watchlist`.
+
+The report is advisory. Do not auto-delete existing sources or auto-promote a candidate solely from the score. Story-level merge / clustering is planned for a later version, not part of v0.3.0.
 
 ## Validation Checklist
 
